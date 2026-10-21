@@ -1,0 +1,32 @@
+# systemd-sysupdate transfer: versioned immutable system tree.
+#
+# Source: tarball built by publish.sh (mkosi --format=tar), published with
+# a SHA256SUMS manifest (+ optional SHA256SUMS.gpg).
+# Target: unpacked into /var/lib/immutable/versions/<version>/, marked
+# read-only (immutable file attribute). The UKI's initrd bind-mounts
+# <version>/usr over /usr at boot.
+#
+# Installed by transition.sh as .transfer or .conf depending on the local
+# systemd-sysupdate's expected extension (probed at install time).
+# For the initial transition, transition.sh rewrites the [Source] section
+# to Type=tar against the local artifacts directory and performs the first
+# update with systemd-sysupdate itself, so the installed state is exactly
+# what later updates produce.
+
+[Transfer]
+# The booted version is protected from garbage collection via a drop-in
+# written by transition.sh (ProtectVersion=<installed version>), because
+# %A (os-release VERSION_ID) does not match our YYYYMMDD.N scheme.
+
+[Source]
+Type=url-tar
+Path=https://immutable-ubuntu.example.com/noble/
+MatchPattern=ubuntu_@v.root.tar.xz
+
+[Target]
+Type=directory
+Path=/var/lib/immutable/versions
+MatchPattern=@v
+CurrentSymlink=current
+ReadOnly=yes
+InstancesMax=2

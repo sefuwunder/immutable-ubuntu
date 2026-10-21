@@ -1,0 +1,44 @@
+#!/bin/sh
+# local-premount: bind-mount the versioned immutable /usr over the state
+# root's /usr, read-only, before switch-root.
+#
+# The UKI carries immutable.version=<version> on its kernel command line.
+# The versioned tree lives at /var/lib/immutable/versions/<version>/ on the
+# state root filesystem (already mounted at $rootmnt by the time this runs).
+#
+# Fail-open: if the versioned tree is missing (e.g. /var on a separate
+# partition not yet mounted, or a non-immutable boot), warn loudly and
+# continue with the state's own /usr.
+#
+# NOTE: mounted read-only but WITHOUT nosuid/nodev: /usr/bin/sudo is setuid
+# and must keep working.
+
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in
+    prereqs) prereqs; exit 0;;
+esac
+
+VERSION=""
+for x in $(cat /proc/cmdline); do
+    case "$x" in
+        immutable.version=*) VERSION="${x#immutable.version=}";;
+    esac
+done
+
+[ -n "$VERSION" ] || exit 0
+
+SRC="${rootmnt}/var/lib/immutable/versions/${VERSION}/usr"
+DST="${rootmnt}/usr"
+
+if [ ! -d "$SRC" ]; then
+    echo "immutable-usr: versioned /usr not found at $SRC; booting with state /usr" >&2
+    exit 0
+fi
+
+if ! mount --bind "$SRC" "$DST"; then
+    echo "immutable-usr: bind mount failed; booting with state /usr" >&2
+    exit 0
+fi
+mount -o remount,bind,ro "$DST"
+echo "immutable-usr: mounted immutable /usr version ${VERSION} (read-only)" >&2

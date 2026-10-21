@@ -1,0 +1,28 @@
+# systemd-sysupdate transfer: Unified Kernel Image (UKI).
+#
+# This file is deliberately named alphabetically LAST: sysupdate executes
+# transfers in filename order and renames into place in the same order, so
+# the boot entry point (the UKI) is only established after the system tree
+# it boots is fully in place. An interrupted update can never leave a UKI
+# whose backing tree is missing.
+#
+# The UKI embeds immutable.version=<version> on its kernel command line,
+# version-locking it to the system tree updated by 10-system.transfer
+# (both transfers share the same @v).
+
+[Transfer]
+# See 10-system.transfer for why ProtectVersion is a transition.sh drop-in.
+
+[Source]
+Type=url-file
+Path=https://immutable-ubuntu.example.com/noble/
+MatchPattern=ubuntu_@v.efi
+
+[Target]
+Type=regular-file
+Path=EFI/Linux
+PathRelativeTo=esp
+MatchPattern=ubuntu_@v.efi
+CurrentSymlink=ubuntu_current.efi
+InstancesMax=2
+Mode=0644
