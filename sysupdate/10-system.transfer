@@ -21,7 +21,7 @@
 [Source]
 Type=url-tar
 Path=https://immutable-ubuntu.example.com/noble/
-MatchPattern=ubuntu_@v.root.tar.xz
+MatchPattern=ubuntu_@v.root.tar.zst
 
 [Target]
 Type=directory

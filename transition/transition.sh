@@ -13,7 +13,7 @@
 #                        [--with-isolation] [--yes] [--dry-run]
 #
 #   --artifacts   directory holding ubuntu_<version>.efi and
-#                 ubuntu_<version>.root.tar.xz (as produced by publish.sh)
+#                 ubuntu_<version>.root.tar.zst (as produced by publish.sh)
 #   --source-url  HTTPS base URL for FUTURE updates (the release codename is
 #                 appended, e.g. https://host/x -> https://host/x/noble/).
 #                 Use --from-local to skip remote updates entirely: transfer
@@ -87,8 +87,8 @@ mapfile -t _efis < <(ls "$ARTIFACTS"/ubuntu_*.efi 2>/dev/null || true)
 [ "${#_efis[@]}" -gt 0 ] || fail "no ubuntu_*.efi found in $ARTIFACTS"
 VERSION="$(printf '%s\n' "${_efis[@]}" | sed 's/.*ubuntu_//; s/\.efi$//' | sort -V | tail -1)"
 info "artifact version: $VERSION"
-[ -f "$ARTIFACTS/ubuntu_${VERSION}.root.tar.xz" ] \
-    || fail "missing $ARTIFACTS/ubuntu_${VERSION}.root.tar.xz"
+[ -f "$ARTIFACTS/ubuntu_${VERSION}.root.tar.zst" ] \
+    || fail "missing $ARTIFACTS/ubuntu_${VERSION}.root.tar.zst"
 
 # The artifacts must be built for THIS Ubuntu release (/usr must match /etc).
 if [ -f "$ARTIFACTS/release" ]; then
@@ -101,7 +101,7 @@ else
 fi
 
 # Space: tarball + unpacked tree + margin.
-_tar_kb="$(du -k "$ARTIFACTS/ubuntu_${VERSION}.root.tar.xz" | cut -f1)"
+_tar_kb="$(du -k "$ARTIFACTS/ubuntu_${VERSION}.root.tar.zst" | cut -f1)"
 check_versions_dir_space "$((_tar_kb * 3 * 1024))"
 
 confirm "Transition this system to immutable-ubuntu $VERSION?"
