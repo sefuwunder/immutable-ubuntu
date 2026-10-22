@@ -77,8 +77,15 @@ info "building UKI (mkosi --format=uki) ..."
 (cd "$MKOSI_DIR" && mkosi --format=uki)
 
 # mkosi names outputs after Output= (immutable-ubuntu) + format suffix.
+# mkosi's exact output names vary by version (it may append _$version to
+# the UKI name), so match by prefix and take the newest. On a miss, dump
+# the directory so the log shows what mkosi actually produced.
 tar_src="$(ls -t "$MKOSI_DIR"/mkosi.output/immutable-ubuntu.tar* 2>/dev/null | head -1 || true)"
-efi_src="$(ls -t "$MKOSI_DIR"/mkosi.output/immutable-ubuntu.efi 2>/dev/null | head -1 || true)"
+efi_src="$(ls -t "$MKOSI_DIR"/mkosi.output/immutable-ubuntu*.efi 2>/dev/null | head -1 || true)"
+if [ -z "$tar_src" ] || [ -z "$efi_src" ]; then
+    echo "publish: contents of $MKOSI_DIR/mkosi.output/:" >&2
+    ls -la "$MKOSI_DIR/mkosi.output/" >&2 || true
+fi
 [ -n "$tar_src" ] || fail "mkosi tar output not found under $MKOSI_DIR/mkosi.output/"
 [ -n "$efi_src" ] || fail "mkosi UKI output not found under $MKOSI_DIR/mkosi.output/"
 
