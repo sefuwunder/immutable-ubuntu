@@ -72,6 +72,34 @@ path is never modified; rollback is just booting it.
   file attribute + (for remote sources) SHA256SUMS manifests with optional
   GPG. Verity partitions are the documented hardening path.
 
+## Daily image builds (the publisher side)
+
+Clients check for updates daily, but a check is only meaningful if someone
+publishes. `publish/daily-build.sh` (with the bundled
+`immutable-daily-build.{service,timer}`, 03:00 daily) closes that loop on
+the build host:
+
+1. Builds a fresh image from **whatever the Ubuntu archives contain right
+   now** — no pinned package versions, so security updates flow in with the
+   next build. mkosi's package cache means only changed `.deb`s download.
+2. Compares the new build's **package manifest** (`ManifestFormat=json`)
+   against the last published one. Unchanged package set → no new version
+   published at all, so clients don't download a redundant full tarball.
+   (mkosi builds aren't bit-reproducible, so artifact hashes would always
+   "differ"; the manifest is the deterministic signal. If the manifest
+   can't be parsed, the script fails open toward freshness: it publishes.)
+3. On change: versions (`YYYYMMDD.N`), signs, publishes, prunes to the
+   newest `--keep` (default 14) versions, and **regenerates + re-signs
+   SHA256SUMS** so the index always matches what's on disk.
+4. A failed build publishes nothing; a second instance exits quietly
+   (flock); a disk-space guard refuses to build under 15G free.
+
+Unattended signing needs a non-interactive GPG setup (passwordless
+dedicated subkey or preset gpg-agent passphrase) — without it the manifest
+goes out unsigned and clients with `Verify=` reject the update. The build
+host holding the signing key is the trust root of the whole system; treat
+it accordingly.
+
 ## Honest limitations (v1)
 
 1. **Secure Boot: must be off.** UKIs are unsigned in v1; preflight aborts if

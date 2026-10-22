@@ -1,0 +1,11 @@
+[Unit]
+Description=Build immutable-ubuntu image daily from current archive packages
+
+[Timer]
+OnCalendar=03:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=immutable-daily-build.service
+
+[Install]
+WantedBy=timers.target

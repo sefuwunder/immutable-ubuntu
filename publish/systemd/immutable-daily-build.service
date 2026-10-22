@@ -1,0 +1,17 @@
+[Unit]
+Description=Daily immutable-ubuntu image build (publisher side of updates)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The build is heavy; don't starve the rest of the machine.
+Nice=10
+# Adjust to wherever this repo lives on the build host.
+Environment=DAILY_OUT=/var/lib/immutable/publish
+Environment=DAILY_KEEP=14
+# Set DAILY_SIGN=<gpg-key-id> for unattended signing. The key must sign
+# without interaction (passwordless subkey or preset gpg-agent
+# passphrase); see publish/daily-build.sh. Without it the manifest is
+# published unsigned and clients with Verify= will reject the update.
+ExecStart=/opt/immutable-ubuntu/publish/daily-build.sh

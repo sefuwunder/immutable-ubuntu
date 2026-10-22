@@ -32,6 +32,14 @@ definitions at your artifact server first — see `transition.sh
 --source-url`), then reboot. Rolling back: boot "Ubuntu (original)" from
 the boot menu, or `sudo ./transition/rollback.sh`.
 
+Daily images: on the build host, install
+`publish/systemd/immutable-daily-build.{service,timer}` (adjust the repo
+path and `DAILY_OUT`/`DAILY_SIGN` in the service) and
+`systemctl enable --now immutable-daily-build.timer`. Every night it
+rebuilds from the current Ubuntu archives and publishes a new version
+only when the package set actually changed — that is the feed the
+clients' daily sysupdate checks consume.
+
 ## Layout
 
 ```
@@ -40,7 +48,10 @@ mkosi/            factory: mkosi.conf + skeleton (initramfs hook that mounts
 sysupdate/        transfer definitions (system tree + UKI, UKI ordered last)
 transition/       transition.sh (the conversion), preflight.sh (checks),
                   rollback.sh (restore EFI boot order)
-publish/          publish.sh (build, version, SHA256SUMS, optional GPG sign)
+publish/          publish.sh (build, version, SHA256SUMS, optional GPG sign),
+                  daily-build.sh (unattended daily rebuild from current
+                  archive packages; publishes only on package-set change)
+                  + systemd/ (daily build timer/service for the build host)
 isolation/        setup.sh (podman, flatpak+flathub, distrobox, ufw baseline)
 docs/             DESIGN.md (architecture, decisions, honest limitations)
 ```
