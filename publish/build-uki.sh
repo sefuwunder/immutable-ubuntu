@@ -47,10 +47,16 @@ command -v ukify >/dev/null 2>&1 || fail "ukify not found on build host (sudo ap
 WORK="$(mktemp -d)"
 R="$WORK/root"
 cleanup() {
-    umount -R "$R/dev" 2>/dev/null || true
-    umount -R "$R/sys" 2>/dev/null || true
-    umount "$R/proc" 2>/dev/null || true
-    rm -rf "$WORK"
+    # Detach /proc if the main flow didn't already (best effort, quiet).
+    umount -l "$R/proc" 2>/dev/null || true
+    # Never rm -rf a tree that is still mounted: that spams
+    # "Operation not permitted" for every file under the mount.
+    if grep -qs "[[:space:]]$R/proc[[:space:]]" /proc/mounts 2>/dev/null; then
+        echo "build-uki: WARNING: $R/proc is still mounted; leaving $WORK for manual cleanup" >&2
+        echo "build-uki:   sudo umount -l $R/proc && sudo rm -rf $WORK" >&2
+    else
+        rm -rf "$WORK"
+    fi
 }
 trap cleanup EXIT
 
@@ -64,11 +70,17 @@ KVER="$(ls "$R/usr/lib/modules/" 2>/dev/null | sort -V | tail -1 || true)"
 info "kernel: $KVER"
 
 info "building initrd with the image's initramfs-tools (chroot; runs our hook)..."
-mount -t proc proc "$R/proc"
-mount --rbind /sys "$R/sys"
-mount --rbind /dev "$R/dev"
+# Only /proc is mounted: mkinitramfs assembles files and doesn't need
+# /sys or /dev, and skipping those rbinds avoids unmount trouble later.
+mount -t proc -o nosuid,noexec,nodev proc "$R/proc" || fail "could not mount /proc in chroot"
 chroot "$R" /usr/sbin/mkinitramfs -o /tmp/immutable.cpio "$KVER" || fail "mkinitramfs failed"
 cp "$R/tmp/immutable.cpio" "$WORK/immutable.cpio"
+# Unmount now (not just in the EXIT trap) so a busy mount fails loudly
+# here instead of spamming rm errors at exit.
+if ! umount "$R/proc" 2>/dev/null; then
+    umount -l "$R/proc" 2>/dev/null || true
+    info "warning: $R/proc was busy; lazy-unmounted"
+fi
 
 info "verifying immutable-usr hook is in the initrd..."
 lsinitramfs "$WORK/immutable.cpio" 2>/dev/null | grep -q 'local-premount/immutable-usr' \
