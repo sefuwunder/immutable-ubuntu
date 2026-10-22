@@ -18,7 +18,8 @@ versioned; everything else is state.**
 
 ```
 firmware -> systemd-boot -> ubuntu_current.efi (UKI, CurrentSymlink)
-  -> kernel + initrd (mkosi-built, contains immutable-usr hook)
+  -> kernel + initrd (initrd built by build-uki.sh with the image's
+       initramfs-tools; contains immutable-usr hook, verified present)
   -> initrd mounts state root at $rootmnt (normal root= handling)
   -> local-premount/immutable-usr:
        bind-mounts $rootmnt/var/lib/immutable/versions/<v>/usr over $rootmnt/usr (ro)
@@ -44,16 +45,20 @@ path is never modified; rollback is just booting it.
 
 ## Key decisions and their tradeoffs
 
-- **mkosi as the factory.** Reproducible Ubuntu trees from the archive, no
-  snowflake build host. `publish.sh` runs mkosi twice (`--format=tar` for the
-  tree, `--format=uki` for the kernel image) and version-locks them.
-- **initramfs-tools hook, not a custom initrd.** The `/usr` mount must happen
-  before switch-root, so it lives in the initrd. The hook is shipped in the
-  mkosi skeleton and `publish.sh` *verifies* it landed in the built UKI
-  (objcopy + lsinitramfs gate). Assumption: mkosi builds the initrd with
-  initramfs-tools honoring `/etc/initramfs-tools/{hooks,scripts}`. If your
-  mkosi uses mkosi-initrd instead, the equivalent is a systemd mount unit in
-  the initrd — the failure will be loud (the gate fails) rather than silent.
+- **mkosi as the factory (tarball only).** Reproducible Ubuntu trees from the
+  archive, no snowflake build host. `publish.sh` runs mkosi once
+  (`--format=tar`); the UKI is assembled separately by
+  `publish/build-uki.sh` with ukify and version-locked to the tree via
+  `immutable.version=<v>`. mkosi's own UKI assembly proved version-fragile
+  (UnifiedKernelImages=auto silently skips ukify when components are
+  missing — exit 0, no .efi — observed 2026-10-21).
+- **initramfs-tools hook, explicit initrd build.** The `/usr` mount must
+  happen before switch-root, so it lives in the initrd. The hook is shipped
+  in the mkosi skeleton. Assumption 2026-10-21 (verified): mkosi's default
+  initrd is mkosi-initrd (systemd-based) and does NOT run initramfs-tools
+  hooks — so `build-uki.sh` builds the initrd explicitly with the image's
+  own initramfs-tools in a chroot of the extracted tarball, then *verifies*
+  the hook landed (lsinitramfs gate, loud failure otherwise).
 - **Fail-open hook.** If the versioned tree is missing at boot (e.g. `/var`
   on a separate partition, or a non-immutable boot), the hook warns and
   continues with the state's own `/usr`. An immutable system that refuses to
@@ -103,7 +108,7 @@ it accordingly.
 ## Honest limitations (v1)
 
 1. **Secure Boot: must be off.** UKIs are unsigned in v1; preflight aborts if
-   SB is enabled. Signing (mkosi `SecureBoot=` + MOK enrollment) is the
+   SB is enabled. Signing (ukify `--secureboot-*` + MOK enrollment) is the
    follow-up.
 2. **No dm-verity.** See above. A tampered tree would still mount (it is
    read-only, not verified). Remote downloads are hash-verified; local
@@ -119,7 +124,10 @@ it accordingly.
 5. **No automatic boot assessment.** Failed boots are not detected and rolled
    back automatically (`@l`/`@d` try-counters are a follow-up). Rollback is
    manual: pick "Ubuntu (original)" or the previous entry.
-6. **The initrd assumption above.** Loud failure, documented, but real.
+6. **Build host needs initramfs-tools + ukify.** `build-uki.sh` chroots into
+   the extracted tree and runs the image's mkinitramfs, then assembles the
+   UKI with ukify; the host needs `initramfs-tools`, `systemd-ukify` and
+   `systemd-boot-efi` installed (loud failure otherwise).
 7. **Single-arch, single-release per publish dir.** Multi-arch/multi-release
    is a matter of more publish dirs, not a redesign.
 
