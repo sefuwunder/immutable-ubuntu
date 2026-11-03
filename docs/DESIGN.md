@@ -12,12 +12,13 @@ versioned; everything else is state.**
 | `/var` | Yes | You (state) | Also hosts `/var/lib/immutable/versions/` |
 | `/home`, `/opt`, `/srv` | Yes | You (state) | Untouched by updates |
 | `/usr/local` | Shadowed | — | Part of `/usr`: anything installed here is invisible after transition. Use distrobox/flatpak. |
-| ESP (`/efi`) | Versioned files | systemd-sysupdate | UKIs + CurrentSymlink |
+| ESP (`/efi`) | Versioned files | systemd-sysupdate | UKIs (auto-discovered; default glob picks newest) |
 
 ## Boot flow
 
 ```
-firmware -> systemd-boot -> ubuntu_current.efi (UKI, CurrentSymlink)
+firmware -> systemd-boot -> newest ubuntu_<v>.efi (UKI, auto-discovered;
+  default glob ubuntu_*.efi selects it by version sorting)
   -> kernel + initrd (initrd built by build-uki.sh with the image's
        initramfs-tools; contains immutable-usr hook, verified present)
   -> initrd mounts state root at $rootmnt (normal root= handling)
@@ -30,8 +31,13 @@ firmware -> systemd-boot -> ubuntu_current.efi (UKI, CurrentSymlink)
 The UKI and the system tree are always version-locked: each UKI embeds
 `immutable.version=<v>`, and systemd-sysupdate updates both transfers as one
 target sharing the same `@v`. The UKI transfer (`20-uki.transfer`) sorts
-alphabetically last, so the boot entry point is only established after the
-tree it boots is fully in place.
+alphabetically last, so the boot image is only installed after the
+tree it boots is fully in place. There is deliberately no CurrentSymlink
+and no boot entry for the UKI: the ESP is vfat, which has no symlinks
+(sysupdate fails the update with "Operation not permitted" if one is
+configured), and a fixed entry would go stale on timer updates. Instead
+systemd-boot auto-discovers the versioned UKIs and the `ubuntu_*.efi`
+default glob boots the newest.
 
 ## Why file-based, not partition-based
 

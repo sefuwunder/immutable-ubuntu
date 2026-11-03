@@ -63,14 +63,16 @@ docs/             DESIGN.md (architecture, decisions, honest limitations)
    `immutable.version=<v>`.
 2. `transition.sh` installs them **through systemd-sysupdate itself** (local
    sources), so the installed state is exactly what later remote updates
-   produce. It adds a systemd-boot entry booting the `ubuntu_current.efi`
-   symlink, keeps a chainload entry for the original GRUB system, and flips
-   the EFI boot order (backed up for rollback).
+   produce. It makes the newest immutable UKI the systemd-boot default
+   (auto-discovered UKIs + the `ubuntu_*.efi` glob — no entry file and no
+   symlink, since the ESP is vfat and has no symlinks), keeps a chainload
+   entry for the original GRUB system, and flips the EFI boot order
+   (backed up for rollback).
 3. At boot, the UKI's initrd bind-mounts
    `/var/lib/immutable/versions/<v>/usr` over `/usr`, read-only. `/etc`,
    `/var`, `/home` come from your existing install, untouched.
 4. `systemd-sysupdate` keeps two versions (`InstancesMax=2`); new versions
-   arrive as tarball + UKI and the symlink flips atomically.
+   arrive as tarball + UKI and the default glob picks the newest.
 
 ## Status and limitations
 

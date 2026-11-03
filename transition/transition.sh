@@ -172,8 +172,8 @@ run "$SYSUPDATE" --definitions="$_tmpdefs" vacuum 2>/dev/null || true
 if [ "$DRY_RUN" = "0" ]; then
     "$SYSUPDATE" list --definitions="$_tmpdefs" | grep -q "$VERSION" \
         || fail "version $VERSION not listed after install"
-    [ -L "$ESP/EFI/Linux/ubuntu_current.efi" ] \
-        || fail "CurrentSymlink $ESP/EFI/Linux/ubuntu_current.efi missing after install"
+    [ -f "$ESP/EFI/Linux/ubuntu_${VERSION}.efi" ] \
+        || fail "UKI $ESP/EFI/Linux/ubuntu_${VERSION}.efi missing after install"
     [ -d "/var/lib/immutable/versions/$VERSION" ] \
         || fail "versioned tree /var/lib/immutable/versions/$VERSION missing after install"
 fi
@@ -235,14 +235,15 @@ run systemctl enable --now systemd-sysupdate.timer 2>/dev/null || \
 # ---------------------------------------------------------------- bootloader
 info "installing systemd-boot to $ESP (GRUB left untouched)"
 run bootctl install --esp-path="$ESP" >/dev/null
-# Immutable entry (boots the CurrentSymlink UKI).
+# No boot entry for the immutable UKI is written, deliberately:
+# systemd-boot auto-discovers UKIs in EFI/Linux, and the default below is
+# a glob selecting the newest ubuntu_*.efi by version sorting. A fixed
+# entry would go stale on timer updates (raw sysupdate installs new
+# versioned UKIs but rewrites no entries), and a CurrentSymlink stable
+# name is impossible: the ESP is vfat, which has no symlinks
+# ("Operation not permitted" from sysupdate's symlink step).
 run mkdir -p "$ESP/loader/entries"
 if [ "$DRY_RUN" = "0" ]; then
-    cat > "$ESP/loader/entries/immutable-ubuntu.conf" <<'EOF'
-title   Immutable Ubuntu
-sort-key immutable-ubuntu
-efi     /EFI/Linux/ubuntu_current.efi
-EOF
     # Original system entry (chainloads the untouched GRUB).
     grub_efi=""
     for g in "$ESP/EFI/ubuntu/grubx64.efi" "$ESP/EFI/ubuntu/shimx64.efi"; do
@@ -274,7 +275,7 @@ EOF
     else
         info "could not find 'Linux Boot Manager' boot entry; set boot order manually in firmware"
     fi
-    run bootctl set-default immutable-ubuntu.conf
+    run bootctl set-default 'ubuntu_*.efi'
 else
     echo "dry-run: write loader entries + update EFI boot order"
 fi
@@ -328,7 +329,7 @@ fi
 cat <<EOF
 
 transition: done. Next steps:
-  1. Reboot and pick "Immutable Ubuntu" (now the default).
+  1. Reboot: the newest immutable UKI boots by default (pick "Ubuntu (original)" from the menu to roll back).
   2. Verify:  findmnt /usr   # should show the read-only versioned bind mount
               $SYSUPDATE list
   3. Update later:  sudo $SYSUPDATE update   (then reboot)

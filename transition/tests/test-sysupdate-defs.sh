@@ -95,6 +95,33 @@ else
     echo "FAIL: missing dir -> '$got'"; failures=$((failures + 1))
 fi
 
+# --- Test 3: no vfat-symlink remnants (2026-11-03) -----------------------
+# The ESP is vfat, which has no symlinks: a CurrentSymlink on the UKI
+# transfer fails the whole update ("Operation not permitted"), and no
+# entry may point at the old ubuntu_current.efi name. The default is the
+# ubuntu_*.efi glob instead.
+if [ -z "${DEFS:-}" ]; then
+    echo "SKIP: no transformed defs (sysupdate missing); CurrentSymlink check skipped"
+elif grep -q "CurrentSymlink" "$DEFS/20-uki$EXT"; then
+    echo "FAIL: transformed 20-uki def still carries CurrentSymlink"
+    failures=$((failures + 1))
+else
+    echo "ok: transformed 20-uki def carries no CurrentSymlink"
+fi
+if grep -rq "ubuntu_current" "$REPO_ROOT/transition/transition.sh" \
+    "$REPO_ROOT/sysupdate/20-uki.transfer"; then
+    echo "FAIL: ubuntu_current still referenced in transition.sh or 20-uki.transfer"
+    failures=$((failures + 1))
+else
+    echo "ok: no ubuntu_current reference in transition.sh or 20-uki.transfer"
+fi
+if grep -qF "set-default 'ubuntu_*.efi'" "$REPO_ROOT/transition/transition.sh"; then
+    echo "ok: default is the ubuntu_*.efi glob"
+else
+    echo "FAIL: transition.sh does not set the ubuntu_*.efi default glob"
+    failures=$((failures + 1))
+fi
+
 if [ "$failures" -eq 0 ]; then
     echo "test-sysupdate-defs: all checks passed"
 else

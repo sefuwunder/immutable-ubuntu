@@ -27,6 +27,11 @@ Type=regular-file
 Path=/EFI/Linux
 PathRelativeTo=esp
 MatchPattern=ubuntu_@v.efi
-CurrentSymlink=ubuntu_current.efi
+# No CurrentSymlink: the ESP is vfat, and vfat has no symlinks, so
+# sysupdate fails the whole update with "Operation not permitted" when it
+# tries to update one. systemd-boot auto-discovers UKIs in EFI/Linux, and
+# transition.sh sets the default to the ubuntu_*.efi glob, which selects
+# the newest UKI by version sorting — no stable name needed, and timer
+# updates stay purely sysupdate.
 InstancesMax=2
 Mode=0644
