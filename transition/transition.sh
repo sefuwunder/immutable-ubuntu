@@ -99,6 +99,13 @@ if [ "${#_efis[@]}" -eq 0 ]; then
             break
         fi
     done
+    # mkosi's raw output names (immutable-ubuntu.efi / immutable-ubuntu.tar.zst)
+    # do not match the glob, and carry no version for the rest of the flow:
+    # the version comes from the ubuntu_<version>.efi name publish.sh assigns.
+    # So a directory holding them is mkosi.output, not an artifacts directory.
+    if ls "$ARTIFACTS"/immutable-ubuntu.efi >/dev/null 2>&1; then
+        _hint="${_hint} This looks like mkosi.output: mkosi names its outputs immutable-ubuntu.efi / immutable-ubuntu.tar.zst, and publish.sh copies them to <out>/<release>/ as ubuntu_<version>.efi / ubuntu_<version>.root.tar.zst — point --artifacts at the publish.sh output directory."
+    fi
     fail "no ubuntu_*.efi found in $ARTIFACTS (contents: ${_contents}). Expected the publish.sh output directory for one release (<out>/<release>/, e.g. out/noble/) holding ubuntu_<version>.efi + ubuntu_<version>.root.tar.zst — build it with publish.sh first.${_hint}"
 fi
 VERSION="$(printf '%s\n' "${_efis[@]}" | sed 's/.*ubuntu_//; s/\.efi$//' | sort -V | tail -1)"
