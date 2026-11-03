@@ -104,11 +104,26 @@ check_esp() {
 }
 
 check_secure_boot() {
+    # Optional arg overrides the SecureBoot variable path (tests); default
+    # is the real EFI variable. v1 UKIs are unsigned and systemd-boot is
+    # not Microsoft-signed, so SB-on must fail loudly here — firmware
+    # refuses to start them, often silently, falling through to the next
+    # entry (which looks like "Linux Boot Manager just doesn't boot").
+    local sb_file="${1:-/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c}"
     local sb="unknown"
-    if command -v mokutil >/dev/null 2>&1; then
+    if [ -e "$sb_file" ]; then
+        # EFI variable files carry 4 attribute bytes before the data byte;
+        # the old code gave up as "unknown" here when mokutil was missing,
+        # so SB-on slipped through preflight entirely on mokutil-less hosts.
+        local sb_byte
+        sb_byte="$(od -An -tu1 -j4 -N1 "$sb_file" 2>/dev/null | tr -d ' ')"
+        case "$sb_byte" in
+            1) sb="SecureBoot enabled (efivars)" ;;
+            0) sb="SecureBoot disabled (efivars)" ;;
+            *) sb="unknown (efivars unreadable)" ;;
+        esac
+    elif command -v mokutil >/dev/null 2>&1; then
         sb="$(mokutil --sb-state 2>/dev/null || echo unknown)"
-    elif [ -e /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c ]; then
-        sb="unknown (efivars present, mokutil missing)"
     fi
     info "Secure Boot state: $sb"
     case "$sb" in

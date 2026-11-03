@@ -122,6 +122,30 @@ else
     failures=$((failures + 1))
 fi
 
+# --- Test 4: Secure Boot check reads the EFI variable (2026-11-03) ------
+# Old code gave up as "unknown" when mokutil was missing even though the
+# variable file existed, so SB-on passed preflight and only surfaced as a
+# silent firmware refusal of systemd-boot. Fake variable files: 4 attribute
+# bytes + the data byte (the -j4 skip is the whole point).
+printf '\x07\x00\x00\x00\x01' > "$WORK2/sb-on"
+printf '\x07\x00\x00\x00\x00' > "$WORK2/sb-off"
+run_sb() {
+    bash -c 'source "$1"; check_secure_boot "$2"' _ "$REPO_ROOT/transition/preflight.sh" "$1"
+}
+out="$(run_sb "$WORK2/sb-on" 2>&1 || true)"
+if echo "$out" | grep -q "Secure Boot is enabled"; then
+    echo "ok: Secure Boot enabled fails preflight via efivars"
+else
+    echo "FAIL: Secure Boot enabled did not fail preflight"
+    failures=$((failures + 1))
+fi
+if run_sb "$WORK2/sb-off" >/dev/null 2>&1; then
+    echo "ok: Secure Boot disabled passes preflight via efivars"
+else
+    echo "FAIL: Secure Boot disabled did not pass preflight"
+    failures=$((failures + 1))
+fi
+
 if [ "$failures" -eq 0 ]; then
     echo "test-sysupdate-defs: all checks passed"
 else
