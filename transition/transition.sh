@@ -117,7 +117,7 @@ info "artifact version: $VERSION"
 if [ -f "$ARTIFACTS/release" ]; then
     art_release="$(tr -d ' \n' < "$ARTIFACTS/release")"
     [ "$art_release" = "$PREFLIGHT_RELEASE" ] \
-        || fail "artifacts built for '$art_release' but this system is '$PREFLIGHT_RELEASE' (refusing: /usr and /etc must come from the same release)"
+        || fail "artifacts built for '$art_release' but this system is '$PREFLIGHT_RELEASE' (refusing: /usr and /etc must come from the same release). Build artifacts for this system with: publish.sh --release $PREFLIGHT_RELEASE"
     info "artifact release matches this system ($art_release)"
 else
     echo "transition: WARNING: no release file in artifacts dir; cannot verify release match" >&2

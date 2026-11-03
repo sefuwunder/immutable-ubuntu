@@ -98,6 +98,24 @@ INNER
         failures=$((failures + 1))
     fi
 
+    # Case E: release mismatch -> error names both releases + the remedy.
+    # (Mirror image of a resolute host with noble artifacts: the lab host
+    # is noble, so a release file saying resolute must trip the guard.)
+    MISMATCH_DIR="$WORK/mismatch"; mkdir -p "$MISMATCH_DIR"
+    touch "$MISMATCH_DIR/ubuntu_20261103.1.efi" "$MISMATCH_DIR/ubuntu_20261103.1.root.tar.zst"
+    printf '%s' "resolute" > "$MISMATCH_DIR/release"
+    out="$(run_case mismatch "$MISMATCH_DIR")"; rc=$?
+    if [ "$rc" -eq 99 ]; then
+        echo "SKIP: mount namespace unavailable in this environment (fake ESP bind failed)"
+    elif echo "$out" | grep -q "artifacts built for 'resolute' but this system is 'noble'" \
+        && echo "$out" | grep -q "publish.sh --release noble"; then
+        echo "ok: release mismatch names both releases and the remedy"
+    else
+        echo "FAIL: release-mismatch case did not report both releases + remedy:"
+        echo "$out" | tail -5
+        failures=$((failures + 1))
+    fi
+
     # Case C: well-formed dir -> dry-run reaches the summary.
     GOOD_DIR="$WORK/good"; mkdir -p "$GOOD_DIR"
     touch "$GOOD_DIR/ubuntu_20261103.1.efi" "$GOOD_DIR/ubuntu_20261103.1.root.tar.zst"
