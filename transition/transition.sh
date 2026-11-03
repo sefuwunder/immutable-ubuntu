@@ -267,14 +267,20 @@ EOF
         echo "dry-run: back up EFI boot order to /var/lib/immutable/boot-order.backup"
     fi
     sb_num="$(efibootmgr | grep -i 'Linux Boot Manager' | grep -oE 'Boot[0-9A-Fa-f]+' | head -1 | sed 's/Boot//')"
-    if [ -n "$sb_num" ]; then
-        cur_order="$(efibootmgr | grep '^BootOrder:' | cut -d: -f2 | tr -d ' ')"
-        new_order="${sb_num},$(echo "$cur_order" | tr ',' '\n' | grep -v "^${sb_num}$" | paste -sd, -)"
-        run efibootmgr -o "$new_order" >/dev/null
-        info "EFI boot order updated (backup at /var/lib/immutable/boot-order.backup)"
-    else
-        info "could not find 'Linux Boot Manager' boot entry; set boot order manually in firmware"
-    fi
+    # The boot-order flip is the point of this section: silently skipping
+    # it leaves "transition: done" on a system that still boots GRUB, which
+    # is exactly the confusing state a skipped reorder produces. Fail loudly.
+    [ -n "$sb_num" ] \
+        || fail "Linux Boot Manager boot entry not found after bootctl install; cannot flip EFI boot order"
+    cur_order="$(efibootmgr | grep '^BootOrder:' | cut -d: -f2 | tr -d ' ')"
+    new_order="${sb_num},$(echo "$cur_order" | tr ',' '\n' | grep -v "^${sb_num}$" | paste -sd, -)"
+    run efibootmgr -o "$new_order" >/dev/null
+    # Verify the reorder stuck: firmware can silently ignore NVRAM writes
+    # (boot-order lock), and a stale order means GRUB keeps booting first.
+    new_first="$(efibootmgr | grep '^BootOrder:' | cut -d: -f2 | tr -d ' ' | cut -d, -f1)"
+    [ "$new_first" = "$sb_num" ] \
+        || fail "EFI boot order did not stick: Linux Boot Manager (Boot$sb_num) is not first after efibootmgr -o (BootOrder now: $(efibootmgr | grep '^BootOrder:' | cut -d: -f2 | tr -d ' ')). Set it first in firmware setup, or check for a boot-order lock / Secure Boot."
+    info "EFI boot order updated (backup at /var/lib/immutable/boot-order.backup)"
     run bootctl set-default 'ubuntu_*.efi'
 else
     echo "dry-run: write loader entries + update EFI boot order"
