@@ -85,7 +85,22 @@ SYSUPDATE="$PREFLIGHT_SYSUPDATE"
 
 # Pick the newest artifact version present (sort -V on the @v field).
 mapfile -t _efis < <(ls "$ARTIFACTS"/ubuntu_*.efi 2>/dev/null || true)
-[ "${#_efis[@]}" -gt 0 ] || fail "no ubuntu_*.efi found in $ARTIFACTS"
+if [ "${#_efis[@]}" -eq 0 ]; then
+    # The bare "not found" error hides the two common causes: --artifacts
+    # pointed at the parent of the release directory (publish.sh lays out
+    # <out>/<release>/, e.g. out/noble/), or publish.sh never ran. Say what
+    # is actually there, and suggest the subdirectory when it holds the files.
+    _contents="$(ls "$ARTIFACTS" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')"
+    [ -n "$_contents" ] || _contents="<empty>"
+    _hint=""
+    for _sub in "$ARTIFACTS"/*/; do
+        if [ -d "$_sub" ] && ls "$_sub"ubuntu_*.efi >/dev/null 2>&1; then
+            _hint=" Did you mean ${_sub}?"
+            break
+        fi
+    done
+    fail "no ubuntu_*.efi found in $ARTIFACTS (contents: ${_contents}). Expected the publish.sh output directory for one release (<out>/<release>/, e.g. out/noble/) holding ubuntu_<version>.efi + ubuntu_<version>.root.tar.zst — build it with publish.sh first.${_hint}"
+fi
 VERSION="$(printf '%s\n' "${_efis[@]}" | sed 's/.*ubuntu_//; s/\.efi$//' | sort -V | tail -1)"
 info "artifact version: $VERSION"
 [ -f "$ARTIFACTS/ubuntu_${VERSION}.root.tar.zst" ] \
