@@ -37,7 +37,16 @@ and no boot entry for the UKI: the ESP is vfat, which has no symlinks
 (sysupdate fails the update with "Operation not permitted" if one is
 configured), and a fixed entry would go stale on timer updates. Instead
 systemd-boot auto-discovers the versioned UKIs and the `ubuntu_*.efi`
-default glob boots the newest.
+default glob boots the newest. Auto-discovery is not free: systemd-boot
+refuses a UKI whose embedded os-release lacks PRETTY_NAME, ID, or
+VERSION_ID/BUILD_ID, and then the UKI is not listed at all (the glob
+can never select it). `build-uki.sh` therefore guarantees those fields
+via `publish/uki-os-release.sh`, starting from the image's os-release
+and adding only what is missing. The UKI cmdline also carries `root=`
+(copied from the build host, which is the machine being transitioned)
+plus `ro`: with no boot entry to add options to, the cmdline is the
+only place root= can come from, and without it the initrd cannot mount
+the state root the hook needs.
 
 ## Why file-based, not partition-based
 

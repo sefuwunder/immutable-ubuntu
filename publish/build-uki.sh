@@ -36,6 +36,7 @@ done
 
 fail() { echo "build-uki: ERROR: $*" >&2; exit 1; }
 info() { echo "build-uki: $*"; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 command -v mkinitramfs >/dev/null 2>&1 || fail "mkinitramfs not found on build host (sudo apt install initramfs-tools)"
 command -v lsinitramfs >/dev/null 2>&1 || fail "lsinitramfs not found on build host (sudo apt install initramfs-tools)"
@@ -87,19 +88,41 @@ lsinitramfs "$WORK/immutable.cpio" 2>/dev/null | grep -q 'local-premount/immutab
     || fail "immutable-usr hook NOT in initrd — versioned /usr would never mount"
 info "hook verified"
 
-OSREL=""
+# systemd-boot refuses a UKI whose embedded os-release lacks PRETTY_NAME,
+# ID, or VERSION_ID/BUILD_ID, and then the UKI is not listed at all (so
+# the default glob can never select it). Augment the image's os-release
+# (or synthesize one) so the UKI is always listable.
+OSREL_SRC=""
 for p in "$R/usr/lib/os-release" "$R/etc/os-release"; do
-    if [ -f "$p" ]; then OSREL="$p"; break; fi
+    if [ -f "$p" ]; then OSREL_SRC="$p"; break; fi
 done
-[ -n "$OSREL" ] || info "no os-release in image; UKI will lack os-release metadata"
+[ -n "$OSREL_SRC" ] || info "no os-release in image; synthesizing one for the UKI"
+"$SCRIPT_DIR/uki-os-release.sh" "${OSREL_SRC:-/dev/null}" "$VERSION" > "$WORK/uki-os-release" \
+    || fail "uki-os-release failed"
+
+# The UKI cmdline is the only place root= can come from: there is no boot
+# entry to add options to, and without root= the initrd cannot mount the
+# state root at $rootmnt, so the hook never runs. The build host IS the
+# machine being transitioned, so copy root= from its current cmdline;
+# else resolve / to a UUID. Fail loudly rather than ship a UKI that
+# cannot find its root.
+ROOT_PARAM=""
+for x in $(cat /proc/cmdline 2>/dev/null || true); do
+    case "$x" in root=*) ROOT_PARAM="$x";; esac
+done
+if [ -z "$ROOT_PARAM" ]; then
+    _root_src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+    _root_uuid="$(blkid -s UUID -o value "$_root_src" 2>/dev/null || true)"
+    [ -n "$_root_uuid" ] && ROOT_PARAM="root=UUID=$_root_uuid"
+fi
+[ -n "$ROOT_PARAM" ] || fail "cannot determine root= for UKI cmdline (no root= in host /proc/cmdline, cannot resolve / to a UUID)"
 
 info "assembling UKI with ukify..."
-# shellcheck disable=SC2086
 ukify build \
     --linux="$R/boot/vmlinuz-$KVER" \
     --initrd="$WORK/immutable.cpio" \
-    --cmdline="immutable.version=$VERSION" \
-    ${OSREL:+--os-release="$OSREL"} \
+    --cmdline="immutable.version=$VERSION $ROOT_PARAM ro" \
+    --os-release="$WORK/uki-os-release" \
     --output="$OUT" || fail "ukify build failed"
 
 info "UKI written: $OUT ($(du -h "$OUT" | cut -f1))"
