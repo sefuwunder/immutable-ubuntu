@@ -81,6 +81,7 @@ fi
 run_preflight
 ESP="$PREFLIGHT_ESP"
 TRANSFER_EXT="$PREFLIGHT_TRANSFER_EXT"
+SYSUPDATE="$PREFLIGHT_SYSUPDATE"
 
 # Pick the newest artifact version present (sort -V on the @v field).
 mapfile -t _efis < <(ls "$ARTIFACTS"/ubuntu_*.efi 2>/dev/null || true)
@@ -131,12 +132,12 @@ for src in sorted(pathlib.Path(srcdir).glob("*.transfer")):
 print("local transfer definitions written")
 PYEOF
 
-run systemd-sysupdate --definitions="$_tmpdefs" update
-run systemd-sysupdate --definitions="$_tmpdefs" vacuum 2>/dev/null || true
+run "$SYSUPDATE" --definitions="$_tmpdefs" update
+run "$SYSUPDATE" --definitions="$_tmpdefs" vacuum 2>/dev/null || true
 
 # Sanity: the installed version must now be visible.
 if [ "$DRY_RUN" = "0" ]; then
-    systemd-sysupdate list --definitions="$_tmpdefs" | grep -q "$VERSION" \
+    "$SYSUPDATE" list --definitions="$_tmpdefs" | grep -q "$VERSION" \
         || fail "version $VERSION not listed after install"
     [ -L "$ESP/EFI/Linux/ubuntu_current.efi" ] \
         || fail "CurrentSymlink $ESP/EFI/Linux/ubuntu_current.efi missing after install"
@@ -196,7 +197,7 @@ else
     echo "dry-run: write ProtectVersion=$VERSION drop-ins"
 fi
 run systemctl enable --now systemd-sysupdate.timer 2>/dev/null || \
-    info "systemd-sysupdate.timer not available; run 'systemd-sysupdate update' manually"
+    info "systemd-sysupdate.timer not available; run '$SYSUPDATE update' manually"
 
 # ---------------------------------------------------------------- bootloader
 info "installing systemd-boot to $ESP (GRUB left untouched)"
@@ -296,8 +297,8 @@ cat <<EOF
 transition: done. Next steps:
   1. Reboot and pick "Immutable Ubuntu" (now the default).
   2. Verify:  findmnt /usr   # should show the read-only versioned bind mount
-              systemd-sysupdate list
-  3. Update later:  sudo systemd-sysupdate update   (then reboot)
+              $SYSUPDATE list
+  3. Update later:  sudo $SYSUPDATE update   (then reboot)
      (local mode: drop new artifacts into /var/lib/immutable/incoming/ first)
   4. Roll back any time: boot "Ubuntu (original)" from the boot menu,
      or run:  sudo ./rollback.sh

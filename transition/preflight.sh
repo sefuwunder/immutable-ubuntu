@@ -8,6 +8,7 @@ PREFLIGHT_ESP=""
 PREFLIGHT_RELEASE=""
 PREFLIGHT_TRANSFER_EXT=".transfer"
 PREFLIGHT_VERSION_OK=0
+PREFLIGHT_SYSUPDATE=""
 
 fail() { echo "preflight: ERROR: $*" >&2; exit 1; }
 warn() { echo "preflight: WARNING: $*" >&2; }
@@ -26,15 +27,37 @@ check_ubuntu() {
     info "Ubuntu ${VERSION_ID:-?} (${PREFLIGHT_RELEASE})"
 }
 
+# systemd-sysupdate is not in PATH on Ubuntu: it ships inside the systemd
+# package at /usr/lib/systemd/systemd-sysupdate. There is no separate
+# systemd-sysupdate package, so `command -v systemd-sysupdate` fails on
+# every Ubuntu host even when the binary is installed. Resolve it once;
+# every caller uses PREFLIGHT_SYSUPDATE, never the bare name.
+resolve_sysupdate() {
+    local cand
+    for cand in "$(command -v systemd-sysupdate 2>/dev/null || true)" \
+                /usr/lib/systemd/systemd-sysupdate \
+                /lib/systemd/systemd-sysupdate; do
+        if [ -n "$cand" ] && [ -x "$cand" ]; then
+            PREFLIGHT_SYSUPDATE="$cand"
+            return 0
+        fi
+    done
+    return 1
+}
+
 check_systemd_sysupdate() {
-    command -v systemd-sysupdate >/dev/null 2>&1 \
-        || fail "systemd-sysupdate not found (systemd too old or minimal install)"
+    if ! resolve_sysupdate; then
+        local sysv
+        sysv="$(systemctl --version 2>/dev/null | head -1)"
+        [ -n "$sysv" ] || sysv="unknown"
+        fail "systemd-sysupdate not found. It ships inside the systemd package at /usr/lib/systemd/systemd-sysupdate (no separate package exists, and it is not in PATH). It needs systemd >= 251, i.e. Ubuntu 24.04 or newer; this system reports: ${sysv}"
+    fi
     local v
-    v="$(systemd-sysupdate --version | head -1 | grep -oE '[0-9]+' | head -1)"
-    info "systemd-sysupdate v${v:-?}"
+    v="$("$PREFLIGHT_SYSUPDATE" --version | head -1 | grep -oE '[0-9]+' | head -1)"
+    info "systemd-sysupdate v${v:-?} (${PREFLIGHT_SYSUPDATE})"
     [ "${v:-0}" -ge 254 ] || warn "systemd < 254: PathRelativeTo=esp unsupported; 20-uki.transfer needs it"
     # Probe which transfer-file extension this sysupdate reads (.transfer vs .conf).
-    if systemd-sysupdate --help 2>/dev/null | grep -qF '*.conf'; then
+    if "$PREFLIGHT_SYSUPDATE" --help 2>/dev/null | grep -qF '*.conf'; then
         PREFLIGHT_TRANSFER_EXT=".conf"
     else
         PREFLIGHT_TRANSFER_EXT=".transfer"

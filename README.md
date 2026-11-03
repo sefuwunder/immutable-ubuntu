@@ -24,10 +24,10 @@ sudo ./transition/transition.sh --artifacts /srv/immutable/noble --from-local \
 
 # 3. Reboot, pick "Immutable Ubuntu", verify
 findmnt /usr
-systemd-sysupdate list
+/usr/lib/systemd/systemd-sysupdate list   # not in PATH on Ubuntu
 ```
 
-Updating later: `sudo systemd-sysupdate update` (point the transfer
+Updating later: `sudo /usr/lib/systemd/systemd-sysupdate update` (point the transfer
 definitions at your artifact server first — see `transition.sh
 --source-url`), then reboot. Rolling back: boot "Ubuntu (original)" from
 the boot menu, or `sudo ./transition/rollback.sh`.
