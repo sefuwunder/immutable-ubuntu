@@ -59,12 +59,15 @@ else
     echo "ok: no bare systemd-sysupdate invocations in transition.sh"
 fi
 
-# 4. Static guard: preflight's version/help probes must use the resolved path.
+# 4. Static guard: preflight's probes must use the resolved path. The
+# extension probe is version-based (sysupdate_def_ext); the old --help
+# probe was wrong on 255, so its presence here would be a regression.
 if grep -q '"$PREFLIGHT_SYSUPDATE" --version' "$REPO_ROOT/transition/preflight.sh" \
-    && grep -q '"$PREFLIGHT_SYSUPDATE" --help' "$REPO_ROOT/transition/preflight.sh"; then
-    echo "ok: preflight probes use the resolved path"
+    && grep -q 'sysupdate_def_ext' "$REPO_ROOT/transition/preflight.sh" \
+    && ! grep -q '"$PREFLIGHT_SYSUPDATE" --help' "$REPO_ROOT/transition/preflight.sh"; then
+    echo "ok: preflight probes use the resolved path (version-based extension probe)"
 else
-    echo "FAIL: preflight probes do not use PREFLIGHT_SYSUPDATE"
+    echo "FAIL: preflight probes do not use PREFLIGHT_SYSUPDATE, or the old --help probe is back"
     failures=$((failures + 1))
 fi
 

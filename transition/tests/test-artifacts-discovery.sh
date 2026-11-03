@@ -50,11 +50,13 @@ printf '#!/bin/sh\nexit 0\n' > "$BIN_DIR/bootctl"
 printf '#!/bin/sh\nexit 0\n' > "$BIN_DIR/efibootmgr"
 chmod +x "$BIN_DIR/bootctl" "$BIN_DIR/efibootmgr"
 export PATH="$BIN_DIR:/usr/bin:/bin"
+# Optional 4th arg: cd there first, so $ART can be a relative path.
+if [ -n "${4:-}" ]; then cd "$4" || exit 99; fi
 exec bash "$REPO_ROOT/transition/transition.sh" --artifacts "$ART" --from-local --yes --dry-run
 INNER
     run_case() {
         # Exit 99 from inner.sh means the fake-ESP bind mount failed.
-        unshare -rm bash "$WORK/inner.sh" "$REPO_ROOT" "$1" "$2" 2>&1
+        unshare -rm bash "$WORK/inner.sh" "$REPO_ROOT" "$1" "$2" "${3:-}" 2>&1
     }
 
     # Case A: empty artifacts dir -> diagnostic error, <empty> contents.
@@ -112,6 +114,22 @@ INNER
         echo "ok: release mismatch names both releases and the remedy"
     else
         echo "FAIL: release-mismatch case did not report both releases + remedy:"
+        echo "$out" | tail -5
+        failures=$((failures + 1))
+    fi
+
+    # Case R: relative --artifacts -> canonicalized, dry-run reaches summary.
+    # (sysupdate would reject the relative path in the temp defs, so the
+    # canonicalization in transition.sh is what makes this case work.)
+    GOODREL="$WORK/goodrel"; mkdir -p "$GOODREL"
+    touch "$GOODREL/ubuntu_20261103.1.efi" "$GOODREL/ubuntu_20261103.1.root.tar.zst"
+    out="$(run_case rel "goodrel" "$WORK")"; rc=$?
+    if [ "$rc" -eq 99 ]; then
+        echo "SKIP: mount namespace unavailable in this environment (fake ESP bind failed)"
+    elif echo "$out" | grep -q "transition: done"; then
+        echo "ok: relative --artifacts reaches the dry-run summary"
+    else
+        echo "FAIL: relative --artifacts case did not reach the summary:"
         echo "$out" | tail -5
         failures=$((failures + 1))
     fi

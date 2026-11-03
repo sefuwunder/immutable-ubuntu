@@ -14,6 +14,33 @@ fail() { echo "preflight: ERROR: $*" >&2; exit 1; }
 warn() { echo "preflight: WARNING: $*" >&2; }
 info() { echo "preflight: $*"; }
 
+# Resolve a directory to a normalized absolute path: no trailing slash, no
+# . or .. components, symlinks resolved. transition.sh needs this for
+# --artifacts: sysupdate rejects a Source path that is not normalized
+# absolute ("Source path is not a normalized, absolute path"), and the
+# temp transfer defs carry --artifacts verbatim. Exits nonzero (empty
+# output) when the directory cannot be entered. Runs in a subshell, so the
+# caller's working directory is unchanged.
+canonicalize_dir() {
+    (cd "$1" && pwd -P)
+}
+
+# Extension this sysupdate loads for transfer definitions, with the dot:
+# .conf before systemd 257, .transfer from 257 on (the rename). --help text
+# does not reliably name the suffix (255's --help mentions neither, so the
+# old --help probe picked .transfer on 255 and the defs were silently
+# ignored), so probe the version, not the help text. Requires
+# PREFLIGHT_SYSUPDATE to be resolved first.
+sysupdate_def_ext() {
+    local _ver
+    _ver="$("$PREFLIGHT_SYSUPDATE" --version 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1)"
+    if [ -n "$_ver" ] && [ "$_ver" -ge 257 ] 2>/dev/null; then
+        echo ".transfer"
+    else
+        echo ".conf"
+    fi
+}
+
 require_root() {
     [ "$(id -u)" = "0" ] || fail "must run as root (sudo)"
 }
@@ -56,12 +83,9 @@ check_systemd_sysupdate() {
     v="$("$PREFLIGHT_SYSUPDATE" --version | head -1 | grep -oE '[0-9]+' | head -1)"
     info "systemd-sysupdate v${v:-?} (${PREFLIGHT_SYSUPDATE})"
     [ "${v:-0}" -ge 254 ] || warn "systemd < 254: PathRelativeTo=esp unsupported; 20-uki.transfer needs it"
-    # Probe which transfer-file extension this sysupdate reads (.transfer vs .conf).
-    if "$PREFLIGHT_SYSUPDATE" --help 2>/dev/null | grep -qF '*.conf'; then
-        PREFLIGHT_TRANSFER_EXT=".conf"
-    else
-        PREFLIGHT_TRANSFER_EXT=".transfer"
-    fi
+    # Which transfer-file extension this sysupdate reads: version-probed
+    # (see sysupdate_def_ext); the old --help probe was wrong on 255.
+    PREFLIGHT_TRANSFER_EXT="$(sysupdate_def_ext)"
     info "transfer file extension: ${PREFLIGHT_TRANSFER_EXT}"
 }
 

@@ -73,6 +73,14 @@ done
 
 [ -n "$ARTIFACTS" ] || { usage 1; }
 [ -d "$ARTIFACTS" ] || fail "artifacts directory not found: $ARTIFACTS"
+# sysupdate requires Source paths to be normalized absolute paths, and the
+# temp transfer defs carry --artifacts verbatim: a relative --artifacts
+# (or one with a trailing slash / .. components) fails validation with
+# "Source path is not a normalized, absolute path". Resolve once here, so
+# every later use (glob, release check, transfer defs) sees the same path.
+_artifacts_in="$ARTIFACTS"
+ARTIFACTS="$(canonicalize_dir "$ARTIFACTS")" \
+    || fail "could not resolve artifacts directory: $_artifacts_in"
 if [ "$FROM_LOCAL" = "0" ] && [ -z "$SOURCE_URL" ]; then
     fail "set --source-url <https-url> for future updates, or --from-local to skip remote updates"
 fi
@@ -136,9 +144,12 @@ confirm "Transition this system to immutable-ubuntu $VERSION?"
 info "installing version $VERSION through systemd-sysupdate (local source)"
 _tmpdefs="$(mktemp -d)"
 trap 'rm -rf "$_tmpdefs"' EXIT
-python3 - "$REPO_ROOT/sysupdate" "$_tmpdefs" "$ARTIFACTS" <<'PYEOF'
+# Defs are written with the extension this sysupdate reads: the repo files
+# are .transfer, but pre-257 sysupdate only loads .conf, so writing
+# src.name verbatim would leave the initial install with no definitions.
+python3 - "$REPO_ROOT/sysupdate" "$_tmpdefs" "$ARTIFACTS" "$TRANSFER_EXT" <<'PYEOF'
 import sys, configparser, pathlib
-srcdir, dstdir, artdir = sys.argv[1], sys.argv[2], sys.argv[3]
+srcdir, dstdir, artdir, ext = sys.argv[1:5]
 local_type = {"url-tar": "tar", "url-file": "regular-file"}
 for src in sorted(pathlib.Path(srcdir).glob("*.transfer")):
     cp = configparser.ConfigParser()
@@ -149,7 +160,7 @@ for src in sorted(pathlib.Path(srcdir).glob("*.transfer")):
     cp["Source"]["Path"] = artdir
     if "Verify" in cp["Transfer"]:
         del cp["Transfer"]["Verify"]  # local sources are not verified
-    with open(pathlib.Path(dstdir) / src.name, "w") as f:
+    with open(pathlib.Path(dstdir) / (src.stem + ext), "w") as f:
         cp.write(f)
 print("local transfer definitions written")
 PYEOF

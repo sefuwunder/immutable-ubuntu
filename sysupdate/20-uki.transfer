@@ -20,7 +20,11 @@ MatchPattern=ubuntu_@v.efi
 
 [Target]
 Type=regular-file
-Path=EFI/Linux
+# Absolute path with the anchor: sysupdate rejects a relative Target path
+# ("Target path is not a normalized, absolute path: EFI/Linux") even with
+# PathRelativeTo set. This is the form the sysupdate.d man page itself uses
+# (Path=/EFI/Linux with an anchor); it still resolves under the ESP.
+Path=/EFI/Linux
 PathRelativeTo=esp
 MatchPattern=ubuntu_@v.efi
 CurrentSymlink=ubuntu_current.efi
