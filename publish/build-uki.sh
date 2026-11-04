@@ -118,11 +118,31 @@ fi
 [ -n "$ROOT_PARAM" ] || fail "cannot determine root= for UKI cmdline (no root= in host /proc/cmdline, cannot resolve / to a UUID)"
 
 info "assembling UKI with ukify..."
+# NOTE: ukify takes --os-release as TEXT|@PATH. A bare path is embedded
+# VERBATIM as the .osrel text — that is how every UKI through 20261103.2
+# ended up with a pathname (e.g. /tmp/tmp.XXX/uki-os-release) as its
+# os-release, which systemd-boot then refused for missing fields. The @
+# prefix is what makes ukify read the file. Do not "simplify" it away.
 ukify build \
     --linux="$R/boot/vmlinuz-$KVER" \
     --initrd="$WORK/immutable.cpio" \
     --cmdline="immutable.version=$VERSION $ROOT_PARAM ro" \
-    --os-release="$WORK/uki-os-release" \
+    --os-release="@$WORK/uki-os-release" \
     --output="$OUT" || fail "ukify build failed"
+
+# Build-time gate: verify the UKI actually carries a usable .osrel, so a
+# bad embedding fails here instead of surfacing as a refused entry at
+# boot. Skipped (with a warning) only when objcopy is unavailable.
+if command -v objcopy >/dev/null 2>&1; then
+    objcopy --dump-section .osrel="$WORK/uki-osrel-check" "$OUT" 2>/dev/null \
+        || fail "UKI has no .osrel section — os-release was not embedded"
+    grep -q '^PRETTY_NAME=' "$WORK/uki-osrel-check" || fail "UKI .osrel lacks PRETTY_NAME"
+    grep -q '^ID=' "$WORK/uki-osrel-check" || fail "UKI .osrel lacks ID"
+    grep -q '^VERSION_ID=' "$WORK/uki-osrel-check" || grep -q '^BUILD_ID=' "$WORK/uki-osrel-check" \
+        || fail "UKI .osrel lacks VERSION_ID/BUILD_ID"
+    info ".osrel verified (PRETTY_NAME, ID, VERSION_ID/BUILD_ID present)"
+else
+    info "warning: objcopy not found; skipping .osrel verification"
+fi
 
 info "UKI written: $OUT ($(du -h "$OUT" | cut -f1))"

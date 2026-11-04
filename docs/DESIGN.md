@@ -42,7 +42,13 @@ refuses a UKI whose embedded os-release lacks PRETTY_NAME, ID, or
 VERSION_ID/BUILD_ID, and then the UKI is not listed at all (the glob
 can never select it). `build-uki.sh` therefore guarantees those fields
 via `publish/uki-os-release.sh`, starting from the image's os-release
-and adding only what is missing. The UKI cmdline also carries `root=`
+and adding only what is missing. The embedding itself has a trap that
+bit every build through 20261103.2: ukify takes `--os-release` as
+TEXT|@PATH, so a bare path is embedded verbatim — those UKIs carried a
+pathname as their `.osrel`, which is what systemd-boot was actually
+refusing. `build-uki.sh` passes `@file`, and verifies the built UKI's
+`.osrel` with objcopy when available, so a bad embedding fails at
+build time instead of at boot. The UKI cmdline also carries `root=`
 (copied from the build host, which is the machine being transitioned)
 plus `ro`: with no boot entry to add options to, the cmdline is the
 only place root= can come from, and without it the initrd cannot mount
