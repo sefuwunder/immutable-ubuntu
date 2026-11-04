@@ -1,6 +1,6 @@
 #!/bin/sh
 # initramfs-tools hook: make sure mount(8) is available in the initrd for
-# the immutable-usr local-premount script. (Busybox usually provides it;
+# the immutable-usr local-bottom script. (Busybox usually provides it;
 # this is belt and suspenders when util-linux mount exists.)
 set -e
 

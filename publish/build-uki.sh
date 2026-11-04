@@ -84,7 +84,7 @@ if ! umount "$R/proc" 2>/dev/null; then
 fi
 
 info "verifying immutable-usr hook is in the initrd..."
-lsinitramfs "$WORK/immutable.cpio" 2>/dev/null | grep -q 'local-premount/immutable-usr' \
+lsinitramfs "$WORK/immutable.cpio" 2>/dev/null | grep -q 'local-bottom/immutable-usr' \
     || fail "immutable-usr hook NOT in initrd — versioned /usr would never mount"
 info "hook verified"
 

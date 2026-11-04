@@ -136,7 +136,9 @@ check_secure_boot() {
 check_var_on_rootfs() {
     # The versioned tree lives under /var/lib/immutable on the state root.
     # If /var is a separate mount, the initrd hook cannot see it yet at
-    # local-premount time (fail-open: boots with the state's own /usr).
+    # local-bottom time (fail-open: boots with the state's own /usr).
+    # (local-bottom runs after the rootfs mounts, but /var itself only
+    # mounts later via fstab, after switch-root.)
     if mountpoint -q /var 2>/dev/null && [ "$(findmnt -n -o SOURCE /var)" != "$(findmnt -n -o SOURCE /)" ]; then
         warn "/var is a separate filesystem; the initrd hook runs before it is mounted. Transition still works but the immutable /usr will NOT apply until /var moves onto the rootfs. See docs/DESIGN.md."
     else

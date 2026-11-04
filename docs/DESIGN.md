@@ -22,7 +22,7 @@ firmware -> systemd-boot -> newest ubuntu_<v>.efi (UKI, auto-discovered;
   -> kernel + initrd (initrd built by build-uki.sh with the image's
        initramfs-tools; contains immutable-usr hook, verified present)
   -> initrd mounts state root at $rootmnt (normal root= handling)
-  -> local-premount/immutable-usr:
+  -> local-bottom/immutable-usr:
        bind-mounts $rootmnt/var/lib/immutable/versions/<v>/usr over $rootmnt/usr (ro)
        reads <v> from the immutable.version= kernel cmdline baked into the UKI
   -> switch-root. /usr is now the versioned tree, read-only.
@@ -80,6 +80,14 @@ path is never modified; rollback is just booting it.
   hooks — so `build-uki.sh` builds the initrd explicitly with the image's
   own initramfs-tools in a chroot of the extracted tarball, then *verifies*
   the hook landed (lsinitramfs gate, loud failure otherwise).
+  Stage is load-bearing: the hook MUST live in `local-bottom`, not
+  `local-premount`. Per the initramfs-tools man page, local-premount runs
+  after the root device is verified but *before* the root fs is mounted, so
+  `$rootmnt` is still empty there and the hook fails open; local-bottom
+  runs *after* the rootfs is mounted. The 20261103.3 boot failed exactly
+  this way (hook in local-premount, image kernel 7.0.0-42 against state
+  modules 7.0.0-28/29, vfat missing, `/boot/efi` unmountable) — fixed by
+  moving the hook to local-bottom in 20261103.4.
 - **Fail-open hook.** If the versioned tree is missing at boot (e.g. `/var`
   on a separate partition, or a non-immutable boot), the hook warns and
   continues with the state's own `/usr`. An immutable system that refuses to
